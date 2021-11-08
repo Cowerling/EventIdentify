@@ -153,9 +153,12 @@ def detect_event(data_file, iforests, normal_depository, threshold):
     return total_error
 
 
-def get_all_monitor_data(data_file, interval):
-    data = []
+def get_all_monitor_data(data_file, interval, has_label=False):
+    data = {}
     time_labels = []
+    labels = []
+
+    offset = 0 if has_label is False else 1
 
     with open(data_file, 'r', encoding='utf-8') as file:
         reader = csv.reader(file)
@@ -163,65 +166,94 @@ def get_all_monitor_data(data_file, interval):
         next(reader)
         header = next(reader)
 
-        day_count = int(len(header) / interval)
-        monitors = header[1: interval + 1]
+        day_count = int(len(header) / (interval + offset))
+        monitors = header[1 + offset: interval + 1 + offset]
+
+        for monitor in monitors:
+            data[monitor] = []
 
         for row in reader:
             time_labels.append(row[0])
-            data.append([float(x) for x in row[1:]])
 
-    return data, day_count, time_labels, monitors
+            sub_data = np.array([float(x) for x in row[1:]])
+            sub_data = sub_data.reshape((-1, interval + offset))
+
+            if has_label is True:
+                labels.append(np.squeeze(sub_data[:, 0]).tolist())
+
+            for index, monitor in enumerate(monitors):
+                data[monitor].append(np.squeeze(sub_data[:, index + offset]).tolist())
+
+    return data, day_count, time_labels, monitors, labels
 
 
-def get_monitor_data(monitor, day, data, monitors):
-    index = monitors.index(monitor)
-    n_data = np.array(data)[:, day * len(monitors) + index: day * len(monitors) + index + 1]
+def get_monitor_data(monitor, day, data):
+    n_data = np.array(data[monitor])[:, day: day + 1]
 
     return n_data.copy()
 
 
-normal_monitor_data, normal_day_count, normal_time_labels, monitors = get_all_monitor_data(normal_data_file, interval)
-test_monitor_data, test_day_count, test_time_labels, _ = get_all_monitor_data(test_data_file, interval)
+normal_monitor_data, normal_day_count, normal_time_labels, monitors, _ = get_all_monitor_data(normal_data_file, interval)
+test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(booster_data_file, interval, True)
 
-day = 0
 moment_length = 5
 moment_count = len(normal_time_labels)
 back_days = 15
 
-monitor = '169'
-k = 3
+k = 2
 
-sequence_detect_result = []
+all_sequence_detect_result = []
 
-for moment in range(moment_length - 1, moment_count):
-    moment_test_monitor_data = get_monitor_data(monitor, day,
-                                                test_monitor_data, monitors)[moment + 1 - moment_length: moment + 1]
-    moment_test_monitor_data = np.squeeze(moment_test_monitor_data)
-    mean_test = np.mean(moment_test_monitor_data)
-    std_test = np.std(moment_test_monitor_data)
+for day in range(0, test_day_count):
+    sequence_detect_result = []
 
-    d_list = []
+    for moment in range(moment_length - 1, moment_count):
+        result = 0
 
-    for i in range(0, back_days):
-        moment_normal_monitor_data = get_monitor_data(monitor, normal_day_count - 1 - i,
-                                                      normal_monitor_data, monitors)[moment + 1 - moment_length: moment + 1]
-        moment_normal_monitor_data = np.squeeze(moment_normal_monitor_data)
-        mean_normal = np.mean(moment_normal_monitor_data)
-        std_normal = np.std(moment_normal_monitor_data)
+        for monitor in monitors:
+            moment_test_monitor_data = get_monitor_data(monitor, day,
+                                                        test_monitor_data)[moment + 1 - moment_length: moment + 1]
+            moment_test_monitor_data = np.squeeze(moment_test_monitor_data)
+            mean_test = np.mean(moment_test_monitor_data)
+            std_test = np.std(moment_test_monitor_data)
 
-        m = np.dot(moment_test_monitor_data, moment_normal_monitor_data)
+            d_list = []
 
-        d = math.sqrt(math.fabs(2 * moment_length * (1 - (m - moment_length * mean_test * mean_normal)
-                                                     / moment_length / std_test / std_normal)))
-        d_list.append(d)
+            for i in range(0, back_days):
+                moment_normal_monitor_data = get_monitor_data(monitor, normal_day_count - 1 - i,
+                                                              normal_monitor_data)[
+                                             moment + 1 - moment_length: moment + 1]
+                moment_normal_monitor_data = np.squeeze(moment_normal_monitor_data)
+                mean_normal = np.mean(moment_normal_monitor_data)
+                std_normal = np.std(moment_normal_monitor_data)
 
-    d_min = np.min(d_list)
-    d_mean = np.mean(d_list)
-    d_std = np.std(d_list)
+                m = np.dot(moment_test_monitor_data, moment_normal_monitor_data)
 
-    d_threshold = d_mean + k * d_std
+                d = math.sqrt(math.fabs(2 * moment_length * (1 - (m - moment_length * mean_test * mean_normal)
+                                                             / moment_length / std_test / std_normal)))
+                d_list.append(d)
 
-    sequence_detect_result.append(int(d_min > d_threshold))
+            d_min = np.min(d_list)
+            d_mean = np.mean(d_list)
+            d_std = np.std(d_list)
+
+            d_threshold = d_mean + k * d_std
+
+            if d_min <= d_threshold:
+                normal_monitor_data[monitor][moment].append(moment_test_monitor_data[-1])
+                normal_monitor_data[monitor][moment] = normal_monitor_data[monitor][moment][1:]
+
+            result += int(d_min > d_threshold)
+
+        sequence_detect_result.append(result)
+
+    all_sequence_detect_result.append(sequence_detect_result)
+
+all_sequence_detect_result = np.array(all_sequence_detect_result)
+all_sequence_detect_result = all_sequence_detect_result.T
+
+print(all_sequence_detect_result)
+print(all_sequence_detect_result.shape)
 
 iforests = build_iforests(sample_data_file, interval, outliers_count)
 normal_depository = build_normal_depository(normal_data_file, interval)
