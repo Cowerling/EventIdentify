@@ -195,7 +195,8 @@ sequence_detect_result = []
 
 for moment in range(moment_length - 1, moment_count):
     moment_test_monitor_data = get_monitor_data(monitor, day,
-                                                test_monitor_data, monitors)[moment + 1 - moment_length: moment]
+                                                test_monitor_data, monitors)[moment + 1 - moment_length: moment + 1]
+    moment_test_monitor_data = np.squeeze(moment_test_monitor_data)
     mean_test = np.mean(moment_test_monitor_data)
     std_test = np.std(moment_test_monitor_data)
 
@@ -203,7 +204,8 @@ for moment in range(moment_length - 1, moment_count):
 
     for i in range(0, back_days):
         moment_normal_monitor_data = get_monitor_data(monitor, normal_day_count - 1 - i,
-                                                      normal_monitor_data, monitors)[moment + 1 - moment_length: moment]
+                                                      normal_monitor_data, monitors)[moment + 1 - moment_length: moment + 1]
+        moment_normal_monitor_data = np.squeeze(moment_normal_monitor_data)
         mean_normal = np.mean(moment_normal_monitor_data)
         std_normal = np.std(moment_normal_monitor_data)
 
