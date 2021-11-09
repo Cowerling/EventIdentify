@@ -6,6 +6,7 @@ from tqdm import tqdm
 from PyNomaly import loop
 from sklearn.cluster import KMeans
 import math
+import itertools
 
 root_dir = r'./data'
 
@@ -194,13 +195,13 @@ def get_monitor_data(monitor, day, data):
 
 
 normal_monitor_data, normal_day_count, normal_time_labels, monitors, _ = get_all_monitor_data(normal_data_file, interval)
-test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(booster_data_file, interval, True)
+test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(error_data_file, interval, True)
 
 moment_length = 5
 moment_count = len(normal_time_labels)
 back_days = 15
 
-k = 2
+k = 3
 
 all_sequence_detect_result = []
 
@@ -218,6 +219,7 @@ for day in range(0, test_day_count):
             std_test = np.std(moment_test_monitor_data)
 
             d_list = []
+            moment_normal_monitor_data_list = []
 
             for i in range(0, back_days):
                 moment_normal_monitor_data = get_monitor_data(monitor, normal_day_count - 1 - i,
@@ -227,6 +229,8 @@ for day in range(0, test_day_count):
                 mean_normal = np.mean(moment_normal_monitor_data)
                 std_normal = np.std(moment_normal_monitor_data)
 
+                moment_normal_monitor_data_list.append((moment_normal_monitor_data, mean_normal, std_normal))
+
                 m = np.dot(moment_test_monitor_data, moment_normal_monitor_data)
 
                 d = math.sqrt(math.fabs(2 * moment_length * (1 - (m - moment_length * mean_test * mean_normal)
@@ -234,8 +238,24 @@ for day in range(0, test_day_count):
                 d_list.append(d)
 
             d_min = np.min(d_list)
-            d_mean = np.mean(d_list)
-            d_std = np.std(d_list)
+
+            normal_d_list = []
+
+            for pair in itertools.combinations([x for x in range(0, back_days)], 2):
+                first_day = pair[0]
+                second_day = pair[1]
+
+                first_moment_normal_monitor_data, first_mean_normal, first_std_normal = moment_normal_monitor_data_list[first_day]
+                second_moment_normal_monitor_data, second_mean_normal, second_std_normal = moment_normal_monitor_data_list[second_day]
+
+                normal_m = np.dot(first_moment_normal_monitor_data, second_moment_normal_monitor_data)
+
+                normal_d = math.sqrt(math.fabs(2 * moment_length * (1 - (normal_m - moment_length * first_mean_normal * second_mean_normal)
+                                                                    / moment_length / first_std_normal / second_std_normal)))
+                normal_d_list.append(normal_d)
+
+            d_mean = np.mean(normal_d_list)
+            d_std = np.std(normal_d_list)
 
             d_threshold = d_mean + k * d_std
 
