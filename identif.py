@@ -148,7 +148,7 @@ def detect_event(data_file, iforests, normal_depository, threshold):
             data_count += y_data.shape[0]
 
             print('时刻: {} 预测: {} 实际: {} 错误率: {}'.format(label, all_monitor_event_list, y_label,
-                                                                   error_count / y_label.shape[0]))
+                                                        error_count / y_label.shape[0]))
 
     total_error = total_error_count / data_count
     return total_error
@@ -194,86 +194,117 @@ def get_monitor_data(monitor, day, data):
     return n_data.copy()
 
 
+def sequence_detect_between_day(normal_monitor_data, normal_day_count, test_monitor_data, test_day_count,
+                                time_labels, monitors,
+                                moment_length):
+    moment_count = len(time_labels)
+    back_days = 15
+
+    k = 3
+
+    all_sequence_detect_result = []
+
+    for day in range(0, test_day_count):
+        sequence_detect_result = []
+
+        for moment in range(moment_length - 1, moment_count):
+            result = 0
+
+            for monitor in monitors:
+                moment_test_monitor_data = get_monitor_data(monitor, day,
+                                                            test_monitor_data)[moment + 1 - moment_length: moment + 1]
+                moment_test_monitor_data = np.squeeze(moment_test_monitor_data)
+                mean_test = np.mean(moment_test_monitor_data)
+                std_test = np.std(moment_test_monitor_data)
+
+                d_list = []
+                moment_normal_monitor_data_list = []
+
+                for i in range(0, back_days):
+                    moment_normal_monitor_data = get_monitor_data(monitor, normal_day_count - 1 - i,
+                                                                  normal_monitor_data)[
+                                                 moment + 1 - moment_length: moment + 1]
+                    moment_normal_monitor_data = np.squeeze(moment_normal_monitor_data)
+                    mean_normal = np.mean(moment_normal_monitor_data)
+                    std_normal = np.std(moment_normal_monitor_data)
+
+                    moment_normal_monitor_data_list.append((moment_normal_monitor_data, mean_normal, std_normal))
+
+                    m = np.dot(moment_test_monitor_data, moment_normal_monitor_data)
+
+                    d = math.sqrt(math.fabs(2 * moment_length * (1 - (m - moment_length * mean_test * mean_normal)
+                                                                 / moment_length / std_test / std_normal)))
+                    d_list.append(d)
+
+                d_min = np.min(d_list)
+
+                normal_d_list = []
+
+                for pair in itertools.combinations([x for x in range(0, back_days)], 2):
+                    first_day = pair[0]
+                    second_day = pair[1]
+
+                    first_moment_normal_monitor_data, first_mean_normal, first_std_normal = \
+                    moment_normal_monitor_data_list[first_day]
+                    second_moment_normal_monitor_data, second_mean_normal, second_std_normal = \
+                    moment_normal_monitor_data_list[second_day]
+
+                    normal_m = np.dot(first_moment_normal_monitor_data, second_moment_normal_monitor_data)
+
+                    normal_d = math.sqrt(math.fabs(
+                        2 * moment_length * (1 - (normal_m - moment_length * first_mean_normal * second_mean_normal)
+                                             / moment_length / first_std_normal / second_std_normal)))
+                    normal_d_list.append(normal_d)
+
+                d_mean = np.mean(normal_d_list)
+                d_std = np.std(normal_d_list)
+
+                d_threshold = d_mean + k * d_std
+
+                if d_min <= d_threshold:
+                    normal_monitor_data[monitor][moment].append(moment_test_monitor_data[-1])
+                    normal_monitor_data[monitor][moment] = normal_monitor_data[monitor][moment][1:]
+
+                result += int(d_min > d_threshold)
+
+            sequence_detect_result.append(result)
+
+        all_sequence_detect_result.append(sequence_detect_result)
+
+    all_sequence_detect_result = np.array(all_sequence_detect_result)
+    all_sequence_detect_result = (all_sequence_detect_result.T > 0).astype(np.int32)
+
+    return all_sequence_detect_result
+
+
+def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_monitor_data, test_day_count,
+                                    time_labels, monitors,
+                                    moment_length):
+    moment_count = len(time_labels)
+
+
 normal_monitor_data, normal_day_count, normal_time_labels, monitors, _ = get_all_monitor_data(normal_data_file, interval)
 test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(error_data_file, interval, True)
 
+day_normal_monitor_data = normal_monitor_data.copy()
+day_test_monitor_data = test_monitor_data.copy()
+
+
+
 moment_length = 5
-moment_count = len(normal_time_labels)
-back_days = 15
 
-k = 3
+first_monitor = '169'
+second_monitor = '204'
 
-all_sequence_detect_result = []
 
-for day in range(0, test_day_count):
-    sequence_detect_result = []
 
-    for moment in range(moment_length - 1, moment_count):
-        result = 0
-
-        for monitor in monitors:
-            moment_test_monitor_data = get_monitor_data(monitor, day,
-                                                        test_monitor_data)[moment + 1 - moment_length: moment + 1]
-            moment_test_monitor_data = np.squeeze(moment_test_monitor_data)
-            mean_test = np.mean(moment_test_monitor_data)
-            std_test = np.std(moment_test_monitor_data)
-
-            d_list = []
-            moment_normal_monitor_data_list = []
-
-            for i in range(0, back_days):
-                moment_normal_monitor_data = get_monitor_data(monitor, normal_day_count - 1 - i,
-                                                              normal_monitor_data)[
-                                             moment + 1 - moment_length: moment + 1]
-                moment_normal_monitor_data = np.squeeze(moment_normal_monitor_data)
-                mean_normal = np.mean(moment_normal_monitor_data)
-                std_normal = np.std(moment_normal_monitor_data)
-
-                moment_normal_monitor_data_list.append((moment_normal_monitor_data, mean_normal, std_normal))
-
-                m = np.dot(moment_test_monitor_data, moment_normal_monitor_data)
-
-                d = math.sqrt(math.fabs(2 * moment_length * (1 - (m - moment_length * mean_test * mean_normal)
-                                                             / moment_length / std_test / std_normal)))
-                d_list.append(d)
-
-            d_min = np.min(d_list)
-
-            normal_d_list = []
-
-            for pair in itertools.combinations([x for x in range(0, back_days)], 2):
-                first_day = pair[0]
-                second_day = pair[1]
-
-                first_moment_normal_monitor_data, first_mean_normal, first_std_normal = moment_normal_monitor_data_list[first_day]
-                second_moment_normal_monitor_data, second_mean_normal, second_std_normal = moment_normal_monitor_data_list[second_day]
-
-                normal_m = np.dot(first_moment_normal_monitor_data, second_moment_normal_monitor_data)
-
-                normal_d = math.sqrt(math.fabs(2 * moment_length * (1 - (normal_m - moment_length * first_mean_normal * second_mean_normal)
-                                                                    / moment_length / first_std_normal / second_std_normal)))
-                normal_d_list.append(normal_d)
-
-            d_mean = np.mean(normal_d_list)
-            d_std = np.std(normal_d_list)
-
-            d_threshold = d_mean + k * d_std
-
-            if d_min <= d_threshold:
-                normal_monitor_data[monitor][moment].append(moment_test_monitor_data[-1])
-                normal_monitor_data[monitor][moment] = normal_monitor_data[monitor][moment][1:]
-
-            result += int(d_min > d_threshold)
-
-        sequence_detect_result.append(result)
-
-    all_sequence_detect_result.append(sequence_detect_result)
-
-all_sequence_detect_result = np.array(all_sequence_detect_result)
-all_sequence_detect_result = all_sequence_detect_result.T
+all_sequence_detect_result = sequence_detect_between_day(day_normal_monitor_data, normal_day_count,
+                                                         day_test_monitor_data, test_day_count,
+                                                         normal_time_labels, monitors, moment_length)
 
 print(all_sequence_detect_result)
-print(all_sequence_detect_result.shape)
+
+input()
 
 iforests = build_iforests(sample_data_file, interval, outliers_count)
 normal_depository = build_normal_depository(normal_data_file, interval)
