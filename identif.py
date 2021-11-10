@@ -194,6 +194,23 @@ def get_monitor_data(monitor, day, data):
     return n_data.copy()
 
 
+def get_moment_monitor_data(monitor, day, data, start_moment, end_moment):
+    moment_monitor_data = get_monitor_data(monitor, day, data)[start_moment: end_moment]
+    moment_monitor_data = np.squeeze(moment_monitor_data)
+    mean = np.mean(moment_monitor_data)
+    std = np.std(moment_monitor_data)
+
+    return moment_monitor_data, mean, std
+
+def get_distance(first_moment_monitor_data, second_moment_monitor_data, first_mean, second_mean, first_std, second_std):
+    length = first_moment_monitor_data.shape[0]
+    m = np.dot(first_moment_monitor_data, second_moment_monitor_data)
+    d = math.sqrt(math.fabs(2 * length * (1 - (m - length * first_mean * second_mean)
+                                          / length / first_std / second_std)))
+
+    return d
+
+
 def sequence_detect_between_day(normal_monitor_data, normal_day_count, test_monitor_data, test_day_count,
                                 time_labels, monitors,
                                 moment_length):
@@ -211,36 +228,33 @@ def sequence_detect_between_day(normal_monitor_data, normal_day_count, test_moni
             result = 0
 
             for monitor in monitors:
-                moment_test_monitor_data = get_monitor_data(monitor, day,
-                                                            test_monitor_data)[moment + 1 - moment_length: moment + 1]
-                moment_test_monitor_data = np.squeeze(moment_test_monitor_data)
-                mean_test = np.mean(moment_test_monitor_data)
-                std_test = np.std(moment_test_monitor_data)
+                moment_test_monitor_data, mean_test, std_test = get_moment_monitor_data(monitor,
+                                                                                        day,
+                                                                                        test_monitor_data,
+                                                                                        moment + 1 - moment_length,
+                                                                                        moment + 1)
 
                 d_list = []
                 moment_normal_monitor_data_list = []
 
                 for i in range(0, back_days):
-                    moment_normal_monitor_data = get_monitor_data(monitor, normal_day_count - 1 - i,
-                                                                  normal_monitor_data)[
-                                                 moment + 1 - moment_length: moment + 1]
-                    moment_normal_monitor_data = np.squeeze(moment_normal_monitor_data)
-                    mean_normal = np.mean(moment_normal_monitor_data)
-                    std_normal = np.std(moment_normal_monitor_data)
+                    moment_normal_monitor_data, mean_normal, std_normal = get_moment_monitor_data(monitor,
+                                                                                                  normal_day_count - 1 - i,
+                                                                                                  normal_monitor_data,
+                                                                                                  moment + 1 - moment_length,
+                                                                                                  moment + 1)
 
                     moment_normal_monitor_data_list.append((moment_normal_monitor_data, mean_normal, std_normal))
 
-                    m = np.dot(moment_test_monitor_data, moment_normal_monitor_data)
-
-                    d = math.sqrt(math.fabs(2 * moment_length * (1 - (m - moment_length * mean_test * mean_normal)
-                                                                 / moment_length / std_test / std_normal)))
+                    d = get_distance(moment_test_monitor_data, moment_normal_monitor_data,
+                                     mean_test, mean_normal, std_test, std_normal)
                     d_list.append(d)
 
                 d_min = np.min(d_list)
 
                 normal_d_list = []
 
-                for pair in itertools.combinations([x for x in range(0, back_days)], 2):
+                for pair in itertools.combinations([x for x in range(normal_day_count - back_days, normal_day_count)], 2):
                     first_day = pair[0]
                     second_day = pair[1]
 
@@ -249,11 +263,8 @@ def sequence_detect_between_day(normal_monitor_data, normal_day_count, test_moni
                     second_moment_normal_monitor_data, second_mean_normal, second_std_normal = \
                     moment_normal_monitor_data_list[second_day]
 
-                    normal_m = np.dot(first_moment_normal_monitor_data, second_moment_normal_monitor_data)
-
-                    normal_d = math.sqrt(math.fabs(
-                        2 * moment_length * (1 - (normal_m - moment_length * first_mean_normal * second_mean_normal)
-                                             / moment_length / first_std_normal / second_std_normal)))
+                    normal_d = get_distance(first_moment_normal_monitor_data, second_moment_normal_monitor_data,
+                                            first_mean_normal, second_mean_normal, first_std_normal, second_std_normal)
                     normal_d_list.append(normal_d)
 
                 d_mean = np.mean(normal_d_list)
@@ -281,28 +292,101 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
                                     time_labels, monitors,
                                     moment_length):
     moment_count = len(time_labels)
+    back_days = 15
+
+    k = 3
+
+    all_sequence_detect_result = []
+
+    for day in range(0, test_day_count):
+        sequence_detect_result = []
+
+        for moment in range(moment_length - 1, moment_count):
+            result = 0
+
+            for monitor_pair in itertools.combinations(monitors, 2):
+                first_monitor = monitor_pair[0]
+                second_monitor = monitor_pair[1]
+
+                first_moment_test_monitor_data, first_mean_test, first_std_test = get_moment_monitor_data(first_monitor,
+                                                                                                          day,
+                                                                                                          test_monitor_data,
+                                                                                                          moment + 1 - moment_length,
+                                                                                                          moment + 1)
+
+                second_moment_test_monitor_data, second_mean_test, second_std_test = get_moment_monitor_data(second_monitor,
+                                                                                                             day,
+                                                                                                             test_monitor_data,
+                                                                                                             moment + 1 - moment_length,
+                                                                                                             moment + 1)
+
+                d_test = get_distance(first_moment_test_monitor_data, second_moment_test_monitor_data,
+                                      first_mean_test, second_mean_test, first_std_test, second_std_test)
+
+                d_normal_list = []
+
+                for back_day in range(normal_day_count - back_days, normal_day_count):
+                    first_moment_normal_monitor_data, first_mean_normal, first_std_normal = get_moment_monitor_data(
+                        first_monitor,
+                        back_day,
+                        normal_monitor_data,
+                        moment + 1 - moment_length,
+                        moment + 1)
+
+                    second_moment_normal_monitor_data, second_mean_normal, second_std_normal = get_moment_monitor_data(
+                        second_monitor,
+                        back_day,
+                        normal_monitor_data,
+                        moment + 1 - moment_length,
+                        moment + 1)
+
+                    d_normal = get_distance(first_moment_normal_monitor_data, second_moment_normal_monitor_data,
+                                            first_mean_normal, second_mean_normal, first_std_normal, second_std_normal)
+
+                    d_normal_list.append(d_normal)
+
+                d_mean = np.mean(d_normal_list)
+                d_std = np.std(d_normal_list)
+                d_threshold = d_mean + k * d_std
+
+                result += int(d_test > d_threshold)
+
+            sequence_detect_result.append(result)
+
+            if result == 0:
+                for monitor in monitors:
+                    normal_monitor_data[monitor][moment].append(test_monitor_data[monitor][moment][day])
+                    normal_monitor_data[monitor][moment] = normal_monitor_data[monitor][moment][1:]
+
+        all_sequence_detect_result.append(sequence_detect_result)
+
+    all_sequence_detect_result = np.array(all_sequence_detect_result)
+    all_sequence_detect_result = (all_sequence_detect_result.T > 0).astype(np.int32)
+
+    return all_sequence_detect_result
 
 
 normal_monitor_data, normal_day_count, normal_time_labels, monitors, _ = get_all_monitor_data(normal_data_file, interval)
-test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(error_data_file, interval, True)
+test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(booster_data_file, interval, True)
+
+moment_length = 5
 
 day_normal_monitor_data = normal_monitor_data.copy()
 day_test_monitor_data = test_monitor_data.copy()
 
+# all_sequence_detect_result = sequence_detect_between_day(day_normal_monitor_data, normal_day_count,
+#                                                          day_test_monitor_data, test_day_count,
+#                                                          normal_time_labels, monitors, moment_length)
 
+monitor_normal_monitor_data = normal_monitor_data.copy()
+monitor_test_monitor_data = test_monitor_data.copy()
 
-moment_length = 5
-
-first_monitor = '169'
-second_monitor = '204'
-
-
-
-all_sequence_detect_result = sequence_detect_between_day(day_normal_monitor_data, normal_day_count,
-                                                         day_test_monitor_data, test_day_count,
-                                                         normal_time_labels, monitors, moment_length)
+all_sequence_detect_result = sequence_detect_between_monitor(monitor_normal_monitor_data, normal_day_count,
+                                                             monitor_test_monitor_data, test_day_count,
+                                                             normal_time_labels, monitors, moment_length)
 
 print(all_sequence_detect_result)
+print(all_sequence_detect_result.shape)
 
 input()
 
