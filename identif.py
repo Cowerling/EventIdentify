@@ -309,6 +309,7 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
                                     moment_length):
     moment_count = len(time_labels)
     back_days = 15
+    monitor_pair_list = list(itertools.combinations(monitors, 2))
 
     k = 3
 
@@ -318,9 +319,9 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
         sequence_detect_result = []
 
         for moment in range(moment_length - 1, moment_count):
-            result = 0
+            result = []
 
-            for monitor_pair in itertools.combinations(monitors, 2):
+            for monitor_pair in monitor_pair_list:
                 first_monitor = monitor_pair[0]
                 second_monitor = monitor_pair[1]
 
@@ -365,11 +366,11 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
                 d_std = np.std(d_normal_list)
                 d_threshold = d_mean + k * d_std
 
-                result += int(d_test > d_threshold)
+                result.append(int(d_test > d_threshold))
 
             sequence_detect_result.append(result)
 
-            if result == 0:
+            if len(result) == 0:
                 for monitor in monitors:
                     normal_monitor_data[monitor][moment].append(test_monitor_data[monitor][moment][day])
                     normal_monitor_data[monitor][moment] = normal_monitor_data[monitor][moment][1:]
@@ -377,11 +378,11 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
         all_sequence_detect_result.append(sequence_detect_result)
 
     all_sequence_detect_result = np.array(all_sequence_detect_result)
-    all_sequence_detect_result = (all_sequence_detect_result.T > 0).astype(np.int32)
-    all_sequence_detect_result = np.concatenate((np.zeros((moment_length - 1, all_sequence_detect_result.shape[1])),
+    all_sequence_detect_result = all_sequence_detect_result.transpose((1, 0, 2))
+    all_sequence_detect_result = np.concatenate((np.zeros((moment_length - 1, all_sequence_detect_result.shape[1], len(monitor_pair_list))),
                                                 all_sequence_detect_result),
                                                 axis=0)
-    all_sequence_detect_result = np.expand_dims(all_sequence_detect_result, axis=2)
+    all_sequence_detect_result = np.expand_dims(all_sequence_detect_result, axis=3)
 
     return all_sequence_detect_result
 
@@ -421,10 +422,12 @@ all_sequence_detect_monitor_result = sequence_detect_between_monitor(monitor_nor
                                                              normal_time_labels, monitors, moment_length)
 
 all_detect_result = np.concatenate((single_detect_result,
-                                    all_sequence_detect_day_result),
+                                    all_sequence_detect_day_result,
+                                    all_sequence_detect_monitor_result),
                                    axis=3)
+
+print('monitors are: {}'.format(monitors))
 
 for moment_i in range(0, all_detect_result.shape[0]):
     for day_j in range(0, all_detect_result.shape[1]):
         print(all_detect_result[moment_i][day_j])
-        print(all_sequence_detect_monitor_result[moment_i][day_j])
