@@ -162,7 +162,7 @@ def detect_event(data_file, iforests, normal_depository, threshold, interval):
         total_all_mean_event_list = np.array(total_all_mean_event_list)
         total_all_mean_event_list = np.expand_dims(total_all_mean_event_list, axis=3)
 
-    return np.concatenate((total_all_monitor_event_list, total_all_mean_event_list), axis=3)
+    return total_all_monitor_event_list, total_all_mean_event_list
 
 
 def get_all_monitor_data(data_file, interval, has_label=False):
@@ -411,7 +411,7 @@ day_test_monitor_data = test_monitor_data.copy()
 monitor_normal_monitor_data = normal_monitor_data.copy()
 monitor_test_monitor_data = test_monitor_data.copy()
 
-single_detect_result = detect_event(booster_data_file, iforests, normal_depository, threshold, interval)
+single_detect_monitor_result, single_detect_mean_result = detect_event(booster_data_file, iforests, normal_depository, threshold, interval)
 
 all_sequence_detect_day_result = sequence_detect_between_day(day_normal_monitor_data, normal_day_count,
                                                          day_test_monitor_data, test_day_count,
@@ -421,13 +421,33 @@ all_sequence_detect_monitor_result = sequence_detect_between_monitor(monitor_nor
                                                              monitor_test_monitor_data, test_day_count,
                                                              normal_time_labels, monitors, moment_length)
 
-all_detect_result = np.concatenate((single_detect_result,
-                                    all_sequence_detect_day_result,
-                                    all_sequence_detect_monitor_result),
+all_detect_result = np.concatenate((single_detect_monitor_result,
+                                    all_sequence_detect_day_result),
                                    axis=3)
 
 print('monitors are: {}'.format(monitors))
 
-for moment_i in range(0, all_detect_result.shape[0]):
-    for day_j in range(0, all_detect_result.shape[1]):
-        print(all_detect_result[moment_i][day_j])
+single_detect_mean_result = np.sum(single_detect_mean_result, axis=1)
+single_detect_mean_result = np.squeeze(single_detect_mean_result)
+
+all_sequence_detect_monitor_result = np.squeeze(all_sequence_detect_monitor_result)
+
+moment_count = all_detect_result.shape[0]
+day_count = all_detect_result.shape[1]
+
+for moment_i in range(0, moment_count):
+    for day_j in range(0, day_count):
+        monitor_1_single_monitor = all_detect_result[moment_i][day_j][0][0]
+        monitor_1_sequence_day = all_detect_result[moment_i][day_j][0][1]
+        monitor_1_mean = single_detect_mean_result[moment_i][0]
+
+        if monitor_1_mean == -day_count:
+            monitor_1_mean = -1
+        elif monitor_1_mean == day_count:
+            monitor_1_mean = 1
+        else:
+            monitor_1_mean = 0
+
+        monitor_1_sequence_monitor = all_sequence_detect_monitor_result[moment_i][day_j][0] + all_sequence_detect_monitor_result[moment_i][day_j][2]
+
+        print(monitor_1_single_monitor, monitor_1_sequence_day, monitor_1_mean, monitor_1_sequence_monitor)
