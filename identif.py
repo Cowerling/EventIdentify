@@ -387,6 +387,34 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
     return all_sequence_detect_result
 
 
+def get_identify_value(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
+                       moment_i, day_j,
+                       monitor):
+    monitor_single_monitor = all_detect_result[moment_i][day_j][monitor][0]
+    monitor_sequence_day = all_detect_result[moment_i][day_j][monitor][1]
+    monitor_mean = single_detect_mean_result[moment_i][monitor]
+
+    if monitor_mean == -day_count:
+        monitor_mean = -1
+    elif monitor_mean == day_count:
+        monitor_mean = 1
+    else:
+        monitor_mean = 0
+
+    start = 0
+    end = 2
+
+    if monitor == 0:
+        end = 1
+    elif monitor == 2:
+        start = 1
+
+    monitor_sequence_monitor = all_sequence_detect_monitor_result[moment_i][day_j][start] + \
+                               all_sequence_detect_monitor_result[moment_i][day_j][end]
+
+    return int(monitor_single_monitor), int(monitor_sequence_day), monitor_mean, int(monitor_sequence_monitor)
+
+
 root_dir = r'./data'
 
 normal_data_file = os.path.join(root_dir, '正常数据.csv')
@@ -437,17 +465,28 @@ day_count = all_detect_result.shape[1]
 
 for moment_i in range(0, moment_count):
     for day_j in range(0, day_count):
-        monitor_1_single_monitor = all_detect_result[moment_i][day_j][0][0]
-        monitor_1_sequence_day = all_detect_result[moment_i][day_j][0][1]
-        monitor_1_mean = single_detect_mean_result[moment_i][0]
+        monitor_1_single_monitor, monitor_1_sequence_day, monitor_1_mean, monitor_1_sequence_monitor = \
+            get_identify_value(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
+                               moment_i, day_j,
+                               0)
 
-        if monitor_1_mean == -day_count:
-            monitor_1_mean = -1
-        elif monitor_1_mean == day_count:
-            monitor_1_mean = 1
-        else:
-            monitor_1_mean = 0
+        monitor_2_single_monitor, monitor_2_sequence_day, monitor_2_mean, monitor_2_sequence_monitor = \
+            get_identify_value(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
+                               moment_i, day_j,
+                               0)
 
-        monitor_1_sequence_monitor = all_sequence_detect_monitor_result[moment_i][day_j][0] + all_sequence_detect_monitor_result[moment_i][day_j][2]
+        monitor_3_single_monitor, monitor_3_sequence_day, monitor_3_mean, monitor_3_sequence_monitor = \
+            get_identify_value(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
+                               moment_i, day_j,
+                               0)
 
         print(monitor_1_single_monitor, monitor_1_sequence_day, monitor_1_mean, monitor_1_sequence_monitor)
+        print(monitor_2_single_monitor, monitor_2_sequence_day, monitor_2_mean, monitor_2_sequence_monitor)
+        print(monitor_3_single_monitor, monitor_3_sequence_day, monitor_3_mean, monitor_3_sequence_monitor)
+        print('*' * 50)
+
+        if monitor_1_single_monitor + monitor_2_single_monitor + monitor_3_single_monitor == 1:
+            if (monitor_1_single_monitor == 1 and monitor_1_sequence_day == 1 and monitor_1_sequence_monitor == 2 and monitor_1_mean == 0) or (monitor_1_single_monitor == 1 and monitor_1_sequence_day == 1 and monitor_1_sequence_monitor == 2 and monitor_1_mean == 0) or\
+                (monitor_1_single_monitor == 1 and monitor_1_sequence_day == 1 and monitor_1_sequence_monitor == 2 and monitor_1_mean == 0):
+                print()
+
