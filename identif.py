@@ -229,7 +229,7 @@ def sequence_detect_between_day(normal_monitor_data, normal_day_count, test_moni
     moment_count = len(time_labels)
     back_days = 15
 
-    k = 3
+    k = 1
 
     all_sequence_detect_result = []
 
@@ -311,7 +311,7 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
     back_days = 15
     monitor_pair_list = list(itertools.combinations(monitors, 2))
 
-    k = 3
+    k = 1
 
     all_sequence_detect_result = []
 
@@ -387,32 +387,29 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
     return all_sequence_detect_result
 
 
-def get_identify_value(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
+class MonitorValue(object):
+    def __init__(self, all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
                        moment_i, day_j,
-                       monitor):
-    monitor_single_monitor = all_detect_result[moment_i][day_j][monitor][0]
-    monitor_sequence_day = all_detect_result[moment_i][day_j][monitor][1]
-    monitor_mean = single_detect_mean_result[moment_i][monitor]
+                       index):
+        monitor_single_monitor = all_detect_result[moment_i][day_j][index][0]
+        monitor_sequence_day = all_detect_result[moment_i][day_j][index][1]
+        monitor_mean = single_detect_mean_result[moment_i][:, index]
 
-    if monitor_mean == -day_count:
-        monitor_mean = -1
-    elif monitor_mean == day_count:
-        monitor_mean = 1
-    else:
-        monitor_mean = 0
+        start = 0
+        end = 2
 
-    start = 0
-    end = 2
+        if index == 0:
+            end = 1
+        elif index == 2:
+            start = 1
 
-    if monitor == 0:
-        end = 1
-    elif monitor == 2:
-        start = 1
+        monitor_sequence_monitor = all_sequence_detect_monitor_result[moment_i][day_j][start] + \
+                                   all_sequence_detect_monitor_result[moment_i][day_j][end]
 
-    monitor_sequence_monitor = all_sequence_detect_monitor_result[moment_i][day_j][start] + \
-                               all_sequence_detect_monitor_result[moment_i][day_j][end]
-
-    return int(monitor_single_monitor), int(monitor_sequence_day), monitor_mean, int(monitor_sequence_monitor)
+        self.single_monitor = int(monitor_single_monitor)
+        self.sequence_day = int(monitor_sequence_day)
+        self.sequence_monitor = int(monitor_sequence_monitor)
+        self.mean = monitor_mean
 
 
 root_dir = r'./data'
@@ -455,38 +452,65 @@ all_detect_result = np.concatenate((single_detect_monitor_result,
 
 print('monitors are: {}'.format(monitors))
 
-single_detect_mean_result = np.sum(single_detect_mean_result, axis=1)
-single_detect_mean_result = np.squeeze(single_detect_mean_result)
-
 all_sequence_detect_monitor_result = np.squeeze(all_sequence_detect_monitor_result)
+single_detect_mean_result = np.squeeze(single_detect_mean_result)
 
 moment_count = all_detect_result.shape[0]
 day_count = all_detect_result.shape[1]
 
+result = []
+
 for moment_i in range(0, moment_count):
+    sub_result = []
+
     for day_j in range(0, day_count):
-        monitor_1_single_monitor, monitor_1_sequence_day, monitor_1_mean, monitor_1_sequence_monitor = \
-            get_identify_value(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
-                               moment_i, day_j,
-                               0)
+        monitor_value_list = []
 
-        monitor_2_single_monitor, monitor_2_sequence_day, monitor_2_mean, monitor_2_sequence_monitor = \
-            get_identify_value(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
-                               moment_i, day_j,
-                               0)
+        for monitor_index, monitor in enumerate(monitors):
+            monitor_value = MonitorValue(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
+                                         moment_i, day_j,
+                                         monitor_index)
+            monitor_value_list.append(monitor_value)
 
-        monitor_3_single_monitor, monitor_3_sequence_day, monitor_3_mean, monitor_3_sequence_monitor = \
-            get_identify_value(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
-                               moment_i, day_j,
-                               0)
+        filter_monitor_value_list = [x for x in monitor_value_list if x.single_monitor != 0 and x.sequence_day != 0 and x.sequence_monitor != 0]
 
-        print(monitor_1_single_monitor, monitor_1_sequence_day, monitor_1_mean, monitor_1_sequence_monitor)
-        print(monitor_2_single_monitor, monitor_2_sequence_day, monitor_2_mean, monitor_2_sequence_monitor)
-        print(monitor_3_single_monitor, monitor_3_sequence_day, monitor_3_mean, monitor_3_sequence_monitor)
-        print('*' * 50)
+        result_value = 0
 
-        if monitor_1_single_monitor + monitor_2_single_monitor + monitor_3_single_monitor == 1:
-            if (monitor_1_single_monitor == 1 and monitor_1_sequence_day == 1 and monitor_1_sequence_monitor == 2 and monitor_1_mean == 0) or (monitor_1_single_monitor == 1 and monitor_1_sequence_day == 1 and monitor_1_sequence_monitor == 2 and monitor_1_mean == 0) or\
-                (monitor_1_single_monitor == 1 and monitor_1_sequence_day == 1 and monitor_1_sequence_monitor == 2 and monitor_1_mean == 0):
-                print()
+        if len(filter_monitor_value_list) == 3:
+            if sum(filter_monitor_value_list[0].mean) == -day_count and sum(filter_monitor_value_list[1].mean) == -day_count and sum(filter_monitor_value_list[2].mean) == -day_count:
+                result_value = 1
+            elif abs(sum(filter_monitor_value_list[0].mean)) != day_count and abs(sum(filter_monitor_value_list[1].mean)) != day_count and abs(sum(filter_monitor_value_list[2].mean)) != day_count:
+                mean_0 = np.array(filter_monitor_value_list[0].mean)
+                mean_1 = np.array(filter_monitor_value_list[1].mean)
+                mean_2 = np.array(filter_monitor_value_list[2].mean)
 
+                mean_diff = np.sum(np.abs(mean_0 - mean_1 - mean_2))
+
+                if mean_diff == 0:
+                    result_value = 7
+                else:
+                    result_value = 4
+            elif abs(sum(filter_monitor_value_list[0].mean)) == day_count and abs(sum(filter_monitor_value_list[1].mean)) == day_count and abs(sum(filter_monitor_value_list[2].mean)) == day_count:
+                result_value = 9
+        elif len(filter_monitor_value_list) == 2:
+            if abs(sum(filter_monitor_value_list[0].mean)) != day_count and abs(sum(filter_monitor_value_list[1].mean)) != day_count:
+                mean_0 = np.array(filter_monitor_value_list[0].mean)
+                mean_1 = np.array(filter_monitor_value_list[1].mean)
+
+                mean_diff = np.sum(np.abs(mean_0 - mean_1))
+
+                if mean_diff == 0:
+                    result_value = 6
+                else:
+                    result_value = 3
+            elif abs(sum(filter_monitor_value_list[0].mean)) == day_count and abs(sum(filter_monitor_value_list[1].mean)) == day_count:
+                result_value = 8
+        elif len(filter_monitor_value_list) == 1:
+            if abs(sum(filter_monitor_value_list[0].mean)) != day_count:
+                result_value = 2
+
+        sub_result.append(result_value)
+
+    result.append(sub_result)
+
+print(np.array(result))
