@@ -1,516 +1,86 @@
 import os
-import csv
 import numpy as np
-from sklearn.ensemble import IsolationForest
-from tqdm import tqdm
-from PyNomaly import loop
-from sklearn.cluster import KMeans
-import math
-import itertools
+import sys
 
+from single_detect import single_detect_event
+from sequence_detect import sequence_detect_event
+from judge import judge
+from monitor import MonitorValue
 
-def build_iforests(sample_file, interval, outliers_count):
-    iforests = {}
-
-    with open(sample_file, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file)
-
-        next(reader)
-        header = next(reader)[1:interval+1]
-
-        rows = list(reader)
-
-        for i in tqdm(range(len(rows)), colour='white'):
-            row = rows[i]
-
-            label = row[0]
-            sub_data = np.array([float(x) for x in row[1:]])
-            x_data = sub_data.reshape((-1, interval))
-
-            sample_count = x_data.shape[0]
-            outliers_fraction = outliers_count * 1.0 / sample_count
-
-            sub_iforests = {}
-
-            for index in range(0, interval):
-                sub_x_data = x_data[:, index].reshape((-1, 1))
-
-                iforest = IsolationForest(max_samples=sub_x_data.shape[0],
-                                          random_state=np.random.RandomState(42), contamination=outliers_fraction)
-                iforest.fit(sub_x_data)
-
-                sub_iforests[index] = iforest
-
-            iforests[label] = sub_iforests
-
-    print('build isolation forests completed.')
-
-    return iforests
-
-
-def build_normal_depository(normal_data_file, interval):
-    normal_depository = {}
-
-    with open(normal_data_file, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file)
-
-        next(reader)
-        next(reader)
-
-        for row in reader:
-            label = row[0]
-
-            data = np.array([float(x) for x in row[1:]])
-            data = data.reshape((-1, interval))
-
-            sub_normal_depository = {}
-
-            for index in range(0, interval):
-                sub_data = data[:, index].reshape((-1, 1))
-
-                sub_normal_depository[index] = sub_data
-
-            normal_depository[label] = sub_normal_depository
-
-    return normal_depository
-
-
-def detect_event(data_file, iforests, normal_depository, threshold, interval):
-    with open(data_file, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file)
-
-        next(reader)
-        next(reader)
-
-        total_all_monitor_event_list = []
-        total_all_mean_event_list = []
-
-        k = 3
-
-        for row in reader:
-            label = row[0]
-
-            sub_data = np.array([float(x) for x in row[1:]])
-            sub_data = sub_data.reshape((-1, interval + 1))
-
-            y_label = sub_data[:, 0]
-            y_data = sub_data[:, 1:]
-
-            all_monitor_event_list = []
-            all_mean_event_list = []
-
-            for index in range(0, interval):
-                sub_y_data = y_data[:, index].reshape((-1, 1))
-                normal_data_list = normal_depository[label][index]
-                iforest = iforests[label][index]
-
-                single_monitor_event_list = []
-                single_mean_event_list = []
-
-                for i in range(0, sub_y_data.shape[0]):
-                    single_data = np.expand_dims(sub_y_data[i], 0)
-
-                    normal_data_mean = np.mean(normal_data_list)
-                    normal_data_std = np.std(normal_data_list)
-
-                    if single_data < normal_data_mean - normal_data_std * k:
-                        single_mean_event_list.append(-1)
-                    elif single_data > normal_data_mean + normal_data_std * k:
-                        single_mean_event_list.append(1)
-                    else:
-                        single_mean_event_list.append(0)
-
-                    check_data_list = np.concatenate((normal_data_list, single_data))
-
-                    iforest_predict = -iforest.score_samples(check_data_list)
-                    iforest_predict = iforest_predict.reshape((-1, 1))
-
-                    m = loop.LocalOutlierProbability(iforest_predict).fit()
-                    loOp_scores = m.local_outlier_probabilities
-
-                    k_means = KMeans(n_clusters=2)
-                    k_means.fit(iforest_predict)
-
-                    p = k_means.labels_ * loOp_scores
-                    p_last_index = p.shape[0] - 1
-
-                    if np.argmax(p) == p_last_index and p[p_last_index] > threshold:
-                        single_monitor_event_list.append(1)
-                    else:
-                        single_monitor_event_list.append(0)
-
-                        normal_data_list = check_data_list[1:].copy()
-                        # normal_data_list = check_data_list.copy()
-
-                single_monitor_event_list = np.array(single_monitor_event_list)
-                single_monitor_event_list = np.expand_dims(single_monitor_event_list, axis=1)
-                all_monitor_event_list.append(single_monitor_event_list)
-
-                single_mean_event_list = np.array(single_mean_event_list)
-                single_mean_event_list = np.expand_dims(single_mean_event_list, axis=1)
-                all_mean_event_list.append(single_mean_event_list)
-
-            all_monitor_event_list = np.concatenate(all_monitor_event_list, axis=1)
-            all_mean_event_list = np.concatenate(all_mean_event_list, axis=1)
-
-            total_all_monitor_event_list.append(all_monitor_event_list)
-            total_all_mean_event_list.append(all_mean_event_list)
-
-        total_all_monitor_event_list = np.array(total_all_monitor_event_list)
-        total_all_monitor_event_list = np.expand_dims(total_all_monitor_event_list, axis=3)
-
-        total_all_mean_event_list = np.array(total_all_mean_event_list)
-        total_all_mean_event_list = np.expand_dims(total_all_mean_event_list, axis=3)
-
-    return total_all_monitor_event_list, total_all_mean_event_list
-
-
-def get_all_monitor_data(data_file, interval, has_label=False):
-    data = {}
-    time_labels = []
-    labels = []
-
-    offset = 0 if has_label is False else 1
-
-    with open(data_file, 'r', encoding='utf-8') as file:
-        reader = csv.reader(file)
-
-        next(reader)
-        header = next(reader)
-
-        day_count = int(len(header) / (interval + offset))
-        monitors = header[1 + offset: interval + 1 + offset]
-
-        for monitor in monitors:
-            data[monitor] = []
-
-        for row in reader:
-            time_labels.append(row[0])
-
-            sub_data = np.array([float(x) for x in row[1:]])
-            sub_data = sub_data.reshape((-1, interval + offset))
-
-            if has_label is True:
-                labels.append(np.squeeze(sub_data[:, 0]).tolist())
-
-            for index, monitor in enumerate(monitors):
-                data[monitor].append(np.squeeze(sub_data[:, index + offset]).tolist())
-
-    return data, day_count, time_labels, monitors, labels
-
-
-def get_monitor_data(monitor, day, data):
-    n_data = np.array(data[monitor])[:, day: day + 1]
-
-    return n_data.copy()
-
-
-def get_moment_monitor_data(monitor, day, data, start_moment, end_moment):
-    moment_monitor_data = get_monitor_data(monitor, day, data)[start_moment: end_moment]
-    moment_monitor_data = np.squeeze(moment_monitor_data)
-    mean = np.mean(moment_monitor_data)
-    std = np.std(moment_monitor_data)
-
-    return moment_monitor_data, mean, std
-
-
-def get_distance(first_moment_monitor_data, second_moment_monitor_data, first_mean, second_mean, first_std, second_std):
-    length = first_moment_monitor_data.shape[0]
-    m = np.dot(first_moment_monitor_data, second_moment_monitor_data)
-    d = math.sqrt(math.fabs(2 * length * (1 - (m - length * first_mean * second_mean)
-                                          / length / first_std / second_std)))
-
-    return d
-
-
-def sequence_detect_between_day(normal_monitor_data, normal_day_count, test_monitor_data, test_day_count,
-                                time_labels, monitors,
-                                moment_length):
-    moment_count = len(time_labels)
-    back_days = 15
-
-    k = 1
-
-    all_sequence_detect_result = []
-
-    for day in range(0, test_day_count):
-        sequence_detect_result = []
-
-        for moment in range(moment_length - 1, moment_count):
-            result = []
-
-            for monitor in monitors:
-                moment_test_monitor_data, mean_test, std_test = get_moment_monitor_data(monitor,
-                                                                                        day,
-                                                                                        test_monitor_data,
-                                                                                        moment + 1 - moment_length,
-                                                                                        moment + 1)
-
-                d_list = []
-                moment_normal_monitor_data_list = []
-
-                for i in range(0, back_days):
-                    moment_normal_monitor_data, mean_normal, std_normal = get_moment_monitor_data(monitor,
-                                                                                                  normal_day_count - 1 - i,
-                                                                                                  normal_monitor_data,
-                                                                                                  moment + 1 - moment_length,
-                                                                                                  moment + 1)
-
-                    moment_normal_monitor_data_list.append((moment_normal_monitor_data, mean_normal, std_normal))
-
-                    d = get_distance(moment_test_monitor_data, moment_normal_monitor_data,
-                                     mean_test, mean_normal, std_test, std_normal)
-                    d_list.append(d)
-
-                d_min = np.min(d_list)
-
-                normal_d_list = []
-
-                for pair in itertools.combinations([x for x in range(0, back_days - 1)], 2):
-                    first_day = pair[0]
-                    second_day = pair[1]
-
-                    first_moment_normal_monitor_data, first_mean_normal, first_std_normal = \
-                    moment_normal_monitor_data_list[first_day]
-                    second_moment_normal_monitor_data, second_mean_normal, second_std_normal = \
-                    moment_normal_monitor_data_list[second_day]
-
-                    normal_d = get_distance(first_moment_normal_monitor_data, second_moment_normal_monitor_data,
-                                            first_mean_normal, second_mean_normal, first_std_normal, second_std_normal)
-                    normal_d_list.append(normal_d)
-
-                d_mean = np.mean(normal_d_list)
-                d_std = np.std(normal_d_list)
-
-                d_threshold = d_mean + k * d_std
-
-                if d_min <= d_threshold:
-                    normal_monitor_data[monitor][moment].append(moment_test_monitor_data[-1])
-                    normal_monitor_data[monitor][moment] = normal_monitor_data[monitor][moment][1:]
-
-                result.append(int(d_min > d_threshold))
-
-            sequence_detect_result.append(result)
-
-        all_sequence_detect_result.append(sequence_detect_result)
-
-    all_sequence_detect_result = np.array(all_sequence_detect_result)
-    all_sequence_detect_result = all_sequence_detect_result.transpose((1, 0, 2))
-    all_sequence_detect_result = np.concatenate((np.zeros((moment_length - 1, all_sequence_detect_result.shape[1], len(monitors))),
-                                                 all_sequence_detect_result),
-                                                axis=0)
-    all_sequence_detect_result = np.expand_dims(all_sequence_detect_result, axis=3)
-
-    return all_sequence_detect_result
-
-
-def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_monitor_data, test_day_count,
-                                    time_labels, monitors,
-                                    moment_length):
-    moment_count = len(time_labels)
-    back_days = 15
-    monitor_pair_list = list(itertools.combinations(monitors, 2))
-
-    k = 1
-
-    all_sequence_detect_result = []
-
-    for day in range(0, test_day_count):
-        sequence_detect_result = []
-
-        for moment in range(moment_length - 1, moment_count):
-            result = []
-
-            for monitor_pair in monitor_pair_list:
-                first_monitor = monitor_pair[0]
-                second_monitor = monitor_pair[1]
-
-                first_moment_test_monitor_data, first_mean_test, first_std_test = get_moment_monitor_data(first_monitor,
-                                                                                                          day,
-                                                                                                          test_monitor_data,
-                                                                                                          moment + 1 - moment_length,
-                                                                                                          moment + 1)
-
-                second_moment_test_monitor_data, second_mean_test, second_std_test = get_moment_monitor_data(second_monitor,
-                                                                                                             day,
-                                                                                                             test_monitor_data,
-                                                                                                             moment + 1 - moment_length,
-                                                                                                             moment + 1)
-
-                d_test = get_distance(first_moment_test_monitor_data, second_moment_test_monitor_data,
-                                      first_mean_test, second_mean_test, first_std_test, second_std_test)
-
-                d_normal_list = []
-
-                for back_day in range(normal_day_count - back_days, normal_day_count):
-                    first_moment_normal_monitor_data, first_mean_normal, first_std_normal = get_moment_monitor_data(
-                        first_monitor,
-                        back_day,
-                        normal_monitor_data,
-                        moment + 1 - moment_length,
-                        moment + 1)
-
-                    second_moment_normal_monitor_data, second_mean_normal, second_std_normal = get_moment_monitor_data(
-                        second_monitor,
-                        back_day,
-                        normal_monitor_data,
-                        moment + 1 - moment_length,
-                        moment + 1)
-
-                    d_normal = get_distance(first_moment_normal_monitor_data, second_moment_normal_monitor_data,
-                                            first_mean_normal, second_mean_normal, first_std_normal, second_std_normal)
-
-                    d_normal_list.append(d_normal)
-
-                d_mean = np.mean(d_normal_list)
-                d_std = np.std(d_normal_list)
-                d_threshold = d_mean + k * d_std
-
-                result.append(int(d_test > d_threshold))
-
-            sequence_detect_result.append(result)
-
-            if len(result) == 0:
-                for monitor in monitors:
-                    normal_monitor_data[monitor][moment].append(test_monitor_data[monitor][moment][day])
-                    normal_monitor_data[monitor][moment] = normal_monitor_data[monitor][moment][1:]
-
-        all_sequence_detect_result.append(sequence_detect_result)
-
-    all_sequence_detect_result = np.array(all_sequence_detect_result)
-    all_sequence_detect_result = all_sequence_detect_result.transpose((1, 0, 2))
-    all_sequence_detect_result = np.concatenate((np.zeros((moment_length - 1, all_sequence_detect_result.shape[1], len(monitor_pair_list))),
-                                                all_sequence_detect_result),
-                                                axis=0)
-    all_sequence_detect_result = np.expand_dims(all_sequence_detect_result, axis=3)
-
-    return all_sequence_detect_result
-
-
-class MonitorValue(object):
-    def __init__(self, all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
-                       moment_i, day_j,
-                       index):
-        monitor_single_monitor = all_detect_result[moment_i][day_j][index][0]
-        monitor_sequence_day = all_detect_result[moment_i][day_j][index][1]
-        monitor_mean = single_detect_mean_result[moment_i][:, index]
-
-        start = 0
-        end = 2
-
-        if index == 0:
-            end = 1
-        elif index == 2:
-            start = 1
-
-        monitor_sequence_monitor = all_sequence_detect_monitor_result[moment_i][day_j][start] + \
-                                   all_sequence_detect_monitor_result[moment_i][day_j][end]
-
-        self.single_monitor = int(monitor_single_monitor)
-        self.sequence_day = int(monitor_sequence_day)
-        self.sequence_monitor = int(monitor_sequence_monitor)
-        self.mean = monitor_mean
-
+np.set_printoptions(threshold=sys.maxsize)
 
 root_dir = r'./data'
 
-normal_data_file = os.path.join(root_dir, '正常数据.csv')
-booster_data_file = os.path.join(root_dir, '爆管数据.csv')
-error_data_file = os.path.join(root_dir, '错误数据.csv')
-sample_data_file = os.path.join(root_dir, '样本数据.csv')
-test_data_file = os.path.join(root_dir, '测试数据.csv')
+normal_data_file = os.path.join(root_dir, '正常数据2.csv')
+sample_data_file = os.path.join(root_dir, '样本数据1.csv')
+
+estimate_data_file = os.path.join(root_dir, '情况1.csv')
 
 interval = 3
 outliers_count = 10
 threshold = 0.2
 moment_length = 5
+label_value = 4
+list_min_size = 2
+k1 = 0.85
+k2 = 0.85
+repair_size = 10
+rollback = moment_length - 1
+under_mean_threshold = 0.8
 
-iforests = build_iforests(sample_data_file, interval, outliers_count)
-normal_depository = build_normal_depository(normal_data_file, interval)
+single_detect_monitor_result, single_detect_mean_result = single_detect_event(sample_data_file,
+                                                                              normal_data_file,
+                                                                              estimate_data_file,
+                                                                              interval, outliers_count, threshold, 3)
 
-normal_monitor_data, normal_day_count, normal_time_labels, monitors, _ = get_all_monitor_data(normal_data_file, interval)
-test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(booster_data_file, interval, True)
+sequence_detect_day_result, sequence_detect_monitor_result, labels = sequence_detect_event(normal_data_file,
+                                                                                           estimate_data_file,
+                                                                                           interval, True, moment_length, 1)
 
-day_normal_monitor_data = normal_monitor_data.copy()
-day_test_monitor_data = test_monitor_data.copy()
-monitor_normal_monitor_data = normal_monitor_data.copy()
-monitor_test_monitor_data = test_monitor_data.copy()
+label_count = np.sum(labels)
+labels[labels == 1] = label_value
 
-single_detect_monitor_result, single_detect_mean_result = detect_event(booster_data_file, iforests, normal_depository, threshold, interval)
+moment_count = single_detect_monitor_result.shape[0]
+day_count = single_detect_monitor_result.shape[1]
 
-all_sequence_detect_day_result = sequence_detect_between_day(day_normal_monitor_data, normal_day_count,
-                                                         day_test_monitor_data, test_day_count,
-                                                         normal_time_labels, monitors, moment_length)
+result = judge(day_count, moment_count, interval,
+               single_detect_monitor_result, single_detect_mean_result,
+               sequence_detect_day_result, sequence_detect_monitor_result,
+               list_min_size, k1, k2, repair_size, rollback, under_mean_threshold)
 
-all_sequence_detect_monitor_result = sequence_detect_between_monitor(monitor_normal_monitor_data, normal_day_count,
-                                                             monitor_test_monitor_data, test_day_count,
-                                                             normal_time_labels, monitors, moment_length)
+contrast = result - labels
 
-all_detect_result = np.concatenate((single_detect_monitor_result,
-                                    all_sequence_detect_day_result),
-                                   axis=3)
+total_count = contrast.shape[0] * contrast.shape[1]
+correct_count = np.sum(contrast == 0)
+omit_count = np.sum(contrast == (-labels)) - np.sum(labels == 0)
+omit_count = 0 if omit_count < 0 else omit_count
+error_count = total_count - correct_count - omit_count
 
-print('monitors are: {}'.format(monitors))
+print(result)
+print('accuracy: {}, error: {}, omit: {}'
+      .format(correct_count / total_count, error_count / total_count, omit_count / label_count))
 
-all_sequence_detect_monitor_result = np.squeeze(all_sequence_detect_monitor_result)
-single_detect_mean_result = np.squeeze(single_detect_mean_result)
+output_file = estimate_data_file.replace('.csv', '.txt')
 
-moment_count = all_detect_result.shape[0]
-day_count = all_detect_result.shape[1]
+with open(output_file, 'w', encoding='utf-8') as file:
+    for moment in range(0, moment_count):
+        print_line = '{'
 
-result = []
+        for day in range(0, day_count):
+            print_line += '['
 
-for moment_i in range(0, moment_count):
-    sub_result = []
+            for monitor in range(0, interval):
+                monitor_value = MonitorValue(single_detect_monitor_result, single_detect_mean_result,
+                                             sequence_detect_day_result, sequence_detect_monitor_result,
+                                             moment, day,
+                                             monitor)
 
-    for day_j in range(0, day_count):
-        monitor_value_list = []
+                print_line += '({}, {}, {}, {}), '.format(monitor_value.single_monitor,
+                                                          monitor_value.sequence_day,
+                                                          monitor_value.sequence_monitor,
+                                                          monitor_value.mean)
 
-        for monitor_index, monitor in enumerate(monitors):
-            monitor_value = MonitorValue(all_detect_result, single_detect_mean_result, all_sequence_detect_monitor_result,
-                                         moment_i, day_j,
-                                         monitor_index)
-            monitor_value_list.append(monitor_value)
+            print_line = print_line[0:-2] + '], '
 
-        filter_monitor_value_list = [x for x in monitor_value_list if x.single_monitor != 0 and x.sequence_day != 0 and x.sequence_monitor != 0]
-
-        result_value = 0
-
-        if len(filter_monitor_value_list) == 3:
-            if sum(filter_monitor_value_list[0].mean) == -day_count and sum(filter_monitor_value_list[1].mean) == -day_count and sum(filter_monitor_value_list[2].mean) == -day_count:
-                result_value = 1
-            elif abs(sum(filter_monitor_value_list[0].mean)) != day_count and abs(sum(filter_monitor_value_list[1].mean)) != day_count and abs(sum(filter_monitor_value_list[2].mean)) != day_count:
-                mean_0 = np.array(filter_monitor_value_list[0].mean)
-                mean_1 = np.array(filter_monitor_value_list[1].mean)
-                mean_2 = np.array(filter_monitor_value_list[2].mean)
-
-                mean_diff = np.sum(np.abs(mean_0 - mean_1 - mean_2))
-
-                if mean_diff == 0:
-                    result_value = 7
-                else:
-                    result_value = 4
-            elif abs(sum(filter_monitor_value_list[0].mean)) == day_count and abs(sum(filter_monitor_value_list[1].mean)) == day_count and abs(sum(filter_monitor_value_list[2].mean)) == day_count:
-                result_value = 9
-        elif len(filter_monitor_value_list) == 2:
-            if abs(sum(filter_monitor_value_list[0].mean)) != day_count and abs(sum(filter_monitor_value_list[1].mean)) != day_count:
-                mean_0 = np.array(filter_monitor_value_list[0].mean)
-                mean_1 = np.array(filter_monitor_value_list[1].mean)
-
-                mean_diff = np.sum(np.abs(mean_0 - mean_1))
-
-                if mean_diff == 0:
-                    result_value = 6
-                else:
-                    result_value = 3
-            elif abs(sum(filter_monitor_value_list[0].mean)) == day_count and abs(sum(filter_monitor_value_list[1].mean)) == day_count:
-                result_value = 8
-        elif len(filter_monitor_value_list) == 1:
-            if abs(sum(filter_monitor_value_list[0].mean)) != day_count:
-                result_value = 2
-
-        sub_result.append(result_value)
-
-    result.append(sub_result)
-
-print(np.array(result))
+        print_line = print_line[0:-2] + '}'
+        file.write(print_line + '\n')
