@@ -141,8 +141,8 @@ def detect_event(data_file, iforests, normal_depository, threshold):
 
                 all_monitor_event_list += np.array(single_monitor_event_list)
 
-            all_monitor_event_list = all_monitor_event_list > 0
-            all_monitor_event_list = all_monitor_event_list.astype(np.int32)
+            # all_monitor_event_list = all_monitor_event_list > 0
+            # all_monitor_event_list = all_monitor_event_list.astype(np.int32)
             error_count = np.sum((all_monitor_event_list - y_label) != 0)
             total_error_count += error_count
             data_count += y_data.shape[0]
@@ -254,7 +254,8 @@ def sequence_detect_between_day(normal_monitor_data, normal_day_count, test_moni
 
                 normal_d_list = []
 
-                for pair in itertools.combinations([x for x in range(normal_day_count - back_days, normal_day_count)], 2):
+                #for pair in itertools.combinations([x for x in range(normal_day_count - back_days, normal_day_count)], 2):
+                for pair in itertools.combinations([x for x in range(0, back_days - 1)], 2):
                     first_day = pair[0]
                     second_day = pair[1]
 
@@ -283,7 +284,8 @@ def sequence_detect_between_day(normal_monitor_data, normal_day_count, test_moni
         all_sequence_detect_result.append(sequence_detect_result)
 
     all_sequence_detect_result = np.array(all_sequence_detect_result)
-    all_sequence_detect_result = (all_sequence_detect_result.T > 0).astype(np.int32)
+    # all_sequence_detect_result = (all_sequence_detect_result.T > 0).astype(np.int32)
+    all_sequence_detect_result = all_sequence_detect_result.T
 
     return all_sequence_detect_result
 
@@ -367,16 +369,18 @@ def sequence_detect_between_monitor(normal_monitor_data, normal_day_count, test_
 
 
 normal_monitor_data, normal_day_count, normal_time_labels, monitors, _ = get_all_monitor_data(normal_data_file, interval)
-test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(booster_data_file, interval, True)
+test_monitor_data, test_day_count, test_time_labels, _, labels = get_all_monitor_data(error_data_file, interval, True)
 
 moment_length = 5
 
-day_normal_monitor_data = normal_monitor_data.copy()
-day_test_monitor_data = test_monitor_data.copy()
-
+# day_normal_monitor_data = normal_monitor_data.copy()
+# day_test_monitor_data = test_monitor_data.copy()
+#
 # all_sequence_detect_result = sequence_detect_between_day(day_normal_monitor_data, normal_day_count,
 #                                                          day_test_monitor_data, test_day_count,
 #                                                          normal_time_labels, monitors, moment_length)
+# print('>' * 10 + '不同天序列' + '<' * 10)
+# print(all_sequence_detect_result)
 
 monitor_normal_monitor_data = normal_monitor_data.copy()
 monitor_test_monitor_data = test_monitor_data.copy()
@@ -384,17 +388,12 @@ monitor_test_monitor_data = test_monitor_data.copy()
 all_sequence_detect_result = sequence_detect_between_monitor(monitor_normal_monitor_data, normal_day_count,
                                                              monitor_test_monitor_data, test_day_count,
                                                              normal_time_labels, monitors, moment_length)
-
+print('>' * 10 + '不同传感器序列' + '<' * 10)
 print(all_sequence_detect_result)
-print(all_sequence_detect_result.shape)
 
-input()
-
+print('>' * 10 + '单点' + '<' * 10)
 iforests = build_iforests(sample_data_file, interval, outliers_count)
 normal_depository = build_normal_depository(normal_data_file, interval)
 
 total_error = detect_event(error_data_file, iforests, normal_depository, threshold)
-
-print('>' * 20)
 print('阈值: {} 总错误率:{}'.format(threshold, total_error))
-print('<' * 20)
