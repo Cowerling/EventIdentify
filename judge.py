@@ -6,7 +6,7 @@ from monitor import MonitorValue
 def judge(day_count, moment_count, interval,
           single_detect_monitor_result, single_detect_mean_result,
           sequence_detect_day_result, sequence_detect_monitor_result,
-          list_min_size, k1, k2, repair_size, rollback, under_mean_threshold):
+          list_min_size, k1, k2, repair_size, rollback, under_mean_threshold, k3):
     all_result = []
 
     for day in range(0, day_count):
@@ -18,7 +18,7 @@ def judge(day_count, moment_count, interval,
         result = np.zeros(moment_count).astype(np.int32)
 
         for moment in range(0, moment_count):
-            if day == 3 and moment == 15:
+            if day == 1 and moment == 39:
                 cc = 0
 
             sign = 0
@@ -52,24 +52,31 @@ def judge(day_count, moment_count, interval,
                     sequence_day_1 = []
                     sequence_day_2 = []
 
+                    sequence_monitor_0 = []
+                    sequence_monitor_1 = []
+                    sequence_monitor_2 = []
+
                     for sub_moment in range(start_doubt_moment, end_doubt_moment + 1):
                         monitor_0_value = MonitorValue(single_detect_monitor_result, single_detect_mean_result,
                                                        sequence_detect_day_result, sequence_detect_monitor_result,
                                                        sub_moment, day,
                                                        0)
                         sequence_day_0.append(monitor_0_value.sequence_day)
+                        sequence_monitor_0.append(monitor_0_value.sequence_monitor)
 
                         monitor_1_value = MonitorValue(single_detect_monitor_result, single_detect_mean_result,
                                                        sequence_detect_day_result, sequence_detect_monitor_result,
                                                        sub_moment, day,
                                                        1)
                         sequence_day_1.append(monitor_1_value.sequence_day)
+                        sequence_monitor_1.append(monitor_1_value.sequence_monitor)
 
                         monitor_2_value = MonitorValue(single_detect_monitor_result, single_detect_mean_result,
                                                        sequence_detect_day_result, sequence_detect_monitor_result,
                                                        sub_moment, day,
                                                        2)
                         sequence_day_2.append(monitor_2_value.sequence_day)
+                        sequence_monitor_2.append(monitor_2_value.sequence_monitor)
 
                     sequence_day_abnormal_0 = len([x for x in sequence_day_0 if x == 1]) * 1.0 / len(sequence_day_0)
                     sequence_day_normal_0 = 1 - sequence_day_abnormal_0
@@ -86,38 +93,40 @@ def judge(day_count, moment_count, interval,
                     sequence_day_abnormal_2 = int(sequence_day_abnormal_2 > k1)
                     sequence_day_normal_2 = int(sequence_day_normal_2 > k2)
 
-                    sequence_day_result = np.array([[sequence_day_abnormal_0, sequence_day_normal_0],
-                                                    [sequence_day_abnormal_1, sequence_day_normal_1],
-                                                    [sequence_day_abnormal_2, sequence_day_normal_2]])
+                    sequence_day_result = [[sequence_day_abnormal_0, sequence_day_normal_0],
+                                           [sequence_day_abnormal_1, sequence_day_normal_1],
+                                           [sequence_day_abnormal_2, sequence_day_normal_2]]
+                    sequence_day_result_1 = len([x for x in sequence_day_result if x == [1, 0]])
+                    sequence_day_result_2 = len([x for x in sequence_day_result if x == [0, 1]])
 
-                    sequence_day_one = np.array([[1, 0],
-                                                 [0, 1],
-                                                 [0, 1]])
+                    sequence_monitor_result = [sequence_monitor_0,
+                                               sequence_monitor_1,
+                                               sequence_monitor_2]
+                    sequence_monitor_result_1 = len(
+                        [x for x in sequence_monitor_result if
+                         np.sum(np.array(x) == np.array([1 for _ in range(0, len(x))])) / len(x) > k3])
+                    sequence_monitor_result_2 = len(
+                        [x for x in sequence_monitor_result if
+                         np.sum(np.array(x) == np.array([2 for _ in range(0, len(x))])) / len(x) > k3])
 
-                    sequence_day_two = np.array([[1, 0],
-                                                 [1, 0],
-                                                 [0, 1]])
-
-                    sequence_day_three = np.array([[1, 0],
-                                                   [1, 0],
-                                                   [1, 0]])
-
-                    if np.sum(sequence_day_result - sequence_day_one) == 0:
+                    if (sequence_monitor_result_1 == 2 and sequence_monitor_result_2 == 1) or (
+                            sequence_day_result_1 == 1 and sequence_day_result_2 == 2):
                         end_doubt_moment = end_doubt_moment - rollback
 
                         if end_doubt_moment >= start_doubt_moment:
                             result[start_doubt_moment: end_doubt_moment + 1] = 1
-                    elif np.sum(sequence_day_result - sequence_day_two) == 0:
+                    elif sequence_day_result_1 == 2 and sequence_day_result_2 == 1:
                         end_doubt_moment = end_doubt_moment - rollback
 
                         if end_doubt_moment >= start_doubt_moment:
                             result[start_doubt_moment: end_doubt_moment + 1] = 2
-                    elif np.sum(sequence_day_result - sequence_day_three) == 0:
+                    elif sequence_day_result_1 == 3:
                         end_doubt_moment = end_doubt_moment - rollback
 
                         if end_doubt_moment >= start_doubt_moment:
                             result[start_doubt_moment: end_doubt_moment + 1] = 3
-                    elif doubt_under_mean_count / (end_doubt_moment + 1 - start_doubt_moment) / interval > under_mean_threshold:
+                    elif doubt_under_mean_count / (
+                            end_doubt_moment + 1 - start_doubt_moment) / interval > under_mean_threshold:
                         result[start_doubt_moment: end_doubt_moment + 1] = 4
 
                 start_doubt_moment = -1
@@ -146,8 +155,8 @@ def judge(day_count, moment_count, interval,
                 end_repair_moment = moment - 1
                 end_repair_value = current_value
 
-            if start_repair_moment != -1 and end_repair_moment != -1 and start_repair_value == 4 and end_repair_value == 4:
-                if end_repair_moment - start_repair_moment + 1 <= repair_size and start_repair_value == end_repair_value:
+            if start_repair_moment != -1 and end_repair_moment != -1 and start_repair_value != -1 and end_repair_value != -1:
+                if end_repair_moment - start_repair_moment + 1 <= repair_size and start_repair_value == 4 and end_repair_value == 4:
                     repair_result[day][start_repair_moment: end_repair_moment + 1] = start_repair_value
 
                 start_repair_moment = -1

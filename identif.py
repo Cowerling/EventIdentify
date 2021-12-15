@@ -14,19 +14,20 @@ root_dir = r'./data'
 normal_data_file = os.path.join(root_dir, '正常数据2.csv')
 sample_data_file = os.path.join(root_dir, '样本数据1.csv')
 
-estimate_data_file = os.path.join(root_dir, '情况1.csv')
+estimate_data_file = os.path.join(root_dir, '情况3.csv')
 
 interval = 3
 outliers_count = 10
 threshold = 0.2
 moment_length = 5
-label_value = 4
+label_value = 2
 list_min_size = 2
 k1 = 0.85
 k2 = 0.85
 repair_size = 10
 rollback = moment_length - 1
 under_mean_threshold = 0.8
+k3 = 0.85
 
 single_detect_monitor_result, single_detect_mean_result = single_detect_event(sample_data_file,
                                                                               normal_data_file,
@@ -46,7 +47,7 @@ day_count = single_detect_monitor_result.shape[1]
 result = judge(day_count, moment_count, interval,
                single_detect_monitor_result, single_detect_mean_result,
                sequence_detect_day_result, sequence_detect_monitor_result,
-               list_min_size, k1, k2, repair_size, rollback, under_mean_threshold)
+               list_min_size, k1, k2, repair_size, rollback, under_mean_threshold, k3)
 
 contrast = result - labels
 
@@ -57,10 +58,18 @@ omit_count = 0 if omit_count < 0 else omit_count
 error_count = total_count - correct_count - omit_count
 
 print(result)
-print('accuracy: {}, error: {}, omit: {}'
-      .format(correct_count / total_count, error_count / total_count, omit_count / label_count))
+print('accuracy: {} {}, error: {} {}, omit: {} {}'
+      .format(correct_count, correct_count / total_count,
+              error_count, error_count / total_count,
+              omit_count, omit_count / label_count))
 
+result_output_file = estimate_data_file.replace('.csv', '_result.txt')
 output_file = estimate_data_file.replace('.csv', '.txt')
+
+with open(result_output_file, 'w', encoding='utf-8') as file:
+    file.write('accuracy: {}, error: {}, omit: {}\n'
+               .format(correct_count / total_count, error_count / total_count, omit_count / label_count))
+    file.write('{}'.format(result))
 
 with open(output_file, 'w', encoding='utf-8') as file:
     for moment in range(0, moment_count):
