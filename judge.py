@@ -127,8 +127,7 @@ def judge(day_count, moment_count, interval,
                         [x for x in sequence_monitor_result if
                          np.sum(np.array(x) == np.array([2 for _ in range(0, len(x))])) / len(x) > k3])
 
-                    if (sequence_monitor_result_1 == 2 and sequence_monitor_result_2 == 1) or (
-                            sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 1):
+                    if sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 1:
                         end_doubt_moment = end_doubt_moment - rollback
 
                         if end_doubt_moment >= start_doubt_moment:
@@ -143,6 +142,16 @@ def judge(day_count, moment_count, interval,
 
                         if end_doubt_moment >= start_doubt_moment:
                             result[start_doubt_moment: end_doubt_moment + 1] = 3
+                    elif sequence_monitor_result_1 == 2 and sequence_monitor_result_2 == 1:
+                        end_doubt_moment = end_doubt_moment - rollback
+
+                        if end_doubt_moment >= start_doubt_moment:
+                            result[start_doubt_moment: end_doubt_moment + 1] = 1
+                    elif sequence_monitor_result_2 == 3:
+                        end_doubt_moment = end_doubt_moment - rollback
+
+                        if end_doubt_moment >= start_doubt_moment:
+                            result[start_doubt_moment: end_doubt_moment + 1] = 2
                     elif doubt_under_mean_count / (
                             end_doubt_moment + 1 - start_doubt_moment) / interval > under_mean_threshold:
                         result[start_doubt_moment: end_doubt_moment + 1] = 4
