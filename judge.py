@@ -18,7 +18,7 @@ def judge(day_count, moment_count, interval,
         result = np.zeros(moment_count).astype(np.int32)
 
         for moment in range(0, moment_count):
-            if day == 1 and moment == 39:
+            if day == 0 and moment == 17:
                 cc = 0
 
             sign = 0
@@ -78,26 +78,44 @@ def judge(day_count, moment_count, interval,
                         sequence_day_2.append(monitor_2_value.sequence_day)
                         sequence_monitor_2.append(monitor_2_value.sequence_monitor)
 
-                    sequence_day_abnormal_0 = len([x for x in sequence_day_0 if x == 1]) * 1.0 / len(sequence_day_0)
-                    sequence_day_normal_0 = 1 - sequence_day_abnormal_0
-                    sequence_day_abnormal_0 = int(sequence_day_abnormal_0 > k1)
-                    sequence_day_normal_0 = int(sequence_day_normal_0 > k2)
+                    sequence_day_result_0 = 4
+                    if len([x for x in sequence_day_0 if x == 1]) * 1.0 / len(sequence_day_0) > k1:
+                        sequence_day_result_0 = 1
+                    if len([x for x in sequence_day_0 if x == 0]) * 1.0 / len(sequence_day_0) > k2:
+                        sequence_day_result_0 = 0
 
-                    sequence_day_abnormal_1 = len([x for x in sequence_day_1 if x == 1]) * 1.0 / len(sequence_day_1)
-                    sequence_day_normal_1 = 1 - sequence_day_abnormal_1
-                    sequence_day_abnormal_1 = int(sequence_day_abnormal_1 > k1)
-                    sequence_day_normal_1 = int(sequence_day_normal_1 > k2)
+                    sequence_day_result_1 = 4
+                    if len([x for x in sequence_day_1 if x == 1]) * 1.0 / len(sequence_day_1) > k1:
+                        sequence_day_result_1 = 1
+                    if len([x for x in sequence_day_1 if x == 0]) * 1.0 / len(sequence_day_1) > k2:
+                        sequence_day_result_1 = 0
 
-                    sequence_day_abnormal_2 = len([x for x in sequence_day_2 if x == 1]) * 1.0 / len(sequence_day_2)
-                    sequence_day_normal_2 = 1 - sequence_day_abnormal_2
-                    sequence_day_abnormal_2 = int(sequence_day_abnormal_2 > k1)
-                    sequence_day_normal_2 = int(sequence_day_normal_2 > k2)
+                    sequence_day_result_2 = 4
+                    if len([x for x in sequence_day_2 if x == 1]) * 1.0 / len(sequence_day_2) > k1:
+                        sequence_day_result_2 = 1
+                    if len([x for x in sequence_day_2 if x == 0]) * 1.0 / len(sequence_day_2) > k2:
+                        sequence_day_result_2 = 0
 
-                    sequence_day_result = [[sequence_day_abnormal_0, sequence_day_normal_0],
-                                           [sequence_day_abnormal_1, sequence_day_normal_1],
-                                           [sequence_day_abnormal_2, sequence_day_normal_2]]
-                    sequence_day_result_1 = len([x for x in sequence_day_result if x == [1, 0]])
-                    sequence_day_result_2 = len([x for x in sequence_day_result if x == [0, 1]])
+                    # sequence_day_abnormal_0 = len([x for x in sequence_day_0 if x == 1]) * 1.0 / len(sequence_day_0)
+                    # sequence_day_normal_0 = 1 - sequence_day_abnormal_0
+                    # sequence_day_abnormal_0 = int(sequence_day_abnormal_0 > k1)
+                    # sequence_day_normal_0 = int(sequence_day_normal_0 > k2)
+                    #
+                    # sequence_day_abnormal_1 = len([x for x in sequence_day_1 if x == 1]) * 1.0 / len(sequence_day_1)
+                    # sequence_day_normal_1 = 1 - sequence_day_abnormal_1
+                    # sequence_day_abnormal_1 = int(sequence_day_abnormal_1 > k1)
+                    # sequence_day_normal_1 = int(sequence_day_normal_1 > k2)
+                    #
+                    # sequence_day_abnormal_2 = len([x for x in sequence_day_2 if x == 1]) * 1.0 / len(sequence_day_2)
+                    # sequence_day_normal_2 = 1 - sequence_day_abnormal_2
+                    # sequence_day_abnormal_2 = int(sequence_day_abnormal_2 > k1)
+                    # sequence_day_normal_2 = int(sequence_day_normal_2 > k2)
+                    #
+                    # sequence_day_result = [[sequence_day_abnormal_0, sequence_day_normal_0],
+                    #                        [sequence_day_abnormal_1, sequence_day_normal_1],
+                    #                        [sequence_day_abnormal_2, sequence_day_normal_2]]
+                    # sequence_day_result_1 = len([x for x in sequence_day_result if x == [1, 0]])
+                    # sequence_day_result_2 = len([x for x in sequence_day_result if x == [0, 1]])
 
                     sequence_monitor_result = [sequence_monitor_0,
                                                sequence_monitor_1,
@@ -110,17 +128,17 @@ def judge(day_count, moment_count, interval,
                          np.sum(np.array(x) == np.array([2 for _ in range(0, len(x))])) / len(x) > k3])
 
                     if (sequence_monitor_result_1 == 2 and sequence_monitor_result_2 == 1) or (
-                            sequence_day_result_1 == 1 and sequence_day_result_2 == 2):
+                            sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 1):
                         end_doubt_moment = end_doubt_moment - rollback
 
                         if end_doubt_moment >= start_doubt_moment:
                             result[start_doubt_moment: end_doubt_moment + 1] = 1
-                    elif sequence_day_result_1 == 2 and sequence_day_result_2 == 1:
+                    elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 2:
                         end_doubt_moment = end_doubt_moment - rollback
 
                         if end_doubt_moment >= start_doubt_moment:
                             result[start_doubt_moment: end_doubt_moment + 1] = 2
-                    elif sequence_day_result_1 == 3:
+                    elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 3:
                         end_doubt_moment = end_doubt_moment - rollback
 
                         if end_doubt_moment >= start_doubt_moment:

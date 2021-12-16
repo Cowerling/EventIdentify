@@ -64,12 +64,16 @@ print('accuracy: {} {}, error: {} {}, omit: {} {}'
               omit_count, omit_count / label_count))
 
 result_output_file = estimate_data_file.replace('.csv', '_result.txt')
+label_output_file = estimate_data_file.replace('.csv', '_label.txt')
 output_file = estimate_data_file.replace('.csv', '.txt')
 
 with open(result_output_file, 'w', encoding='utf-8') as file:
+    file.write('{}'.format(result))
     file.write('accuracy: {}, error: {}, omit: {}\n'
                .format(correct_count / total_count, error_count / total_count, omit_count / label_count))
-    file.write('{}'.format(result))
+
+with open(label_output_file, 'w', encoding='utf-8') as file:
+    file.write('{}'.format(labels))
 
 with open(output_file, 'w', encoding='utf-8') as file:
     for moment in range(0, moment_count):
