@@ -13,16 +13,18 @@ def judge(day_count, moment_count, interval,
         start_doubt_moment = -1
         end_doubt_moment = -1
         doubt_mean = 0
+        doubt_mean_list = []
         doubt_under_mean_count = 0
 
         result = np.zeros(moment_count).astype(np.int32)
 
         for moment in range(0, moment_count):
-            if day == 0 and moment == 17:
+            if day == 5 and moment == 58:
                 cc = 0
 
             sign = 0
             mean = 0
+            mean_list = []
             under_mean_count = 0
 
             for monitor in range(0, interval):
@@ -33,17 +35,19 @@ def judge(day_count, moment_count, interval,
 
                 sign += monitor_value.single_monitor + monitor_value.sequence_day + monitor_value.sequence_monitor
                 mean += abs(monitor_value.mean)
+                mean_list.append(monitor_value.mean)
                 if monitor_value.mean == -1:
                     under_mean_count += 1
 
             if sign != 0 and start_doubt_moment == -1:
                 start_doubt_moment = moment
 
-            if sign == 0 and start_doubt_moment != -1 and end_doubt_moment == -1:
+            if sign == 0 and mean == 0 and start_doubt_moment != -1 and end_doubt_moment == -1:
                 end_doubt_moment = moment - 1
 
-            if start_doubt_moment != -1 and sign != 0:
+            if start_doubt_moment != -1 and (sign != 0 or mean != 0):
                 doubt_mean += mean
+                doubt_mean_list.append(mean_list)
                 doubt_under_mean_count += under_mean_count
 
             if start_doubt_moment != -1 and end_doubt_moment != -1:
@@ -96,27 +100,6 @@ def judge(day_count, moment_count, interval,
                     if len([x for x in sequence_day_2 if x == 0]) * 1.0 / len(sequence_day_2) > k2:
                         sequence_day_result_2 = 0
 
-                    # sequence_day_abnormal_0 = len([x for x in sequence_day_0 if x == 1]) * 1.0 / len(sequence_day_0)
-                    # sequence_day_normal_0 = 1 - sequence_day_abnormal_0
-                    # sequence_day_abnormal_0 = int(sequence_day_abnormal_0 > k1)
-                    # sequence_day_normal_0 = int(sequence_day_normal_0 > k2)
-                    #
-                    # sequence_day_abnormal_1 = len([x for x in sequence_day_1 if x == 1]) * 1.0 / len(sequence_day_1)
-                    # sequence_day_normal_1 = 1 - sequence_day_abnormal_1
-                    # sequence_day_abnormal_1 = int(sequence_day_abnormal_1 > k1)
-                    # sequence_day_normal_1 = int(sequence_day_normal_1 > k2)
-                    #
-                    # sequence_day_abnormal_2 = len([x for x in sequence_day_2 if x == 1]) * 1.0 / len(sequence_day_2)
-                    # sequence_day_normal_2 = 1 - sequence_day_abnormal_2
-                    # sequence_day_abnormal_2 = int(sequence_day_abnormal_2 > k1)
-                    # sequence_day_normal_2 = int(sequence_day_normal_2 > k2)
-                    #
-                    # sequence_day_result = [[sequence_day_abnormal_0, sequence_day_normal_0],
-                    #                        [sequence_day_abnormal_1, sequence_day_normal_1],
-                    #                        [sequence_day_abnormal_2, sequence_day_normal_2]]
-                    # sequence_day_result_1 = len([x for x in sequence_day_result if x == [1, 0]])
-                    # sequence_day_result_2 = len([x for x in sequence_day_result if x == [0, 1]])
-
                     sequence_monitor_result = [sequence_monitor_0,
                                                sequence_monitor_1,
                                                sequence_monitor_2]
@@ -127,7 +110,17 @@ def judge(day_count, moment_count, interval,
                         [x for x in sequence_monitor_result if
                          np.sum(np.array(x) == np.array([2 for _ in range(0, len(x))])) / len(x) > k3])
 
-                    if sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 1:
+                    if sequence_monitor_result_1 == 2 and sequence_monitor_result_2 == 1:
+                        end_doubt_moment = end_doubt_moment - rollback
+
+                        if end_doubt_moment >= start_doubt_moment:
+                            result[start_doubt_moment: end_doubt_moment + 1] = 1
+                    elif sequence_monitor_result_2 == 3:
+                        end_doubt_moment = end_doubt_moment - rollback
+
+                        if end_doubt_moment >= start_doubt_moment:
+                            result[start_doubt_moment: end_doubt_moment + 1] = 2
+                    elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 1:
                         end_doubt_moment = end_doubt_moment - rollback
 
                         if end_doubt_moment >= start_doubt_moment:
@@ -142,23 +135,33 @@ def judge(day_count, moment_count, interval,
 
                         if end_doubt_moment >= start_doubt_moment:
                             result[start_doubt_moment: end_doubt_moment + 1] = 3
-                    elif sequence_monitor_result_1 == 2 and sequence_monitor_result_2 == 1:
-                        end_doubt_moment = end_doubt_moment - rollback
 
-                        if end_doubt_moment >= start_doubt_moment:
-                            result[start_doubt_moment: end_doubt_moment + 1] = 1
-                    elif sequence_monitor_result_2 == 3:
-                        end_doubt_moment = end_doubt_moment - rollback
-
-                        if end_doubt_moment >= start_doubt_moment:
-                            result[start_doubt_moment: end_doubt_moment + 1] = 2
                     elif doubt_under_mean_count / (
                             end_doubt_moment + 1 - start_doubt_moment) / interval > under_mean_threshold:
                         result[start_doubt_moment: end_doubt_moment + 1] = 4
 
+                    remain_doubt_mean_list = []
+
+                    for sub_doubt_mean in reversed(doubt_mean_list):
+                        if np.sum(np.abs(sub_doubt_mean)) != 0:
+                            remain_doubt_mean_list.insert(0, sub_doubt_mean)
+
+                    fault_2 = len(remain_doubt_mean_list) > 0 and np.sum(remain_doubt_mean_list[0]) == -2
+
+                    if fault_2:
+                        for sub_remain_doubt_mean in remain_doubt_mean_list:
+                            if sub_remain_doubt_mean != remain_doubt_mean_list[0]:
+                                fault_2 = False
+                                break
+
+                    if fault_2:
+                        result[start_doubt_moment: end_doubt_moment + 1] = 0
+                        result[start_doubt_moment: start_doubt_moment + len(remain_doubt_mean_list)] = 2
+
                 start_doubt_moment = -1
                 end_doubt_moment = -1
                 doubt_mean = 0
+                doubt_mean_list = []
                 doubt_under_mean_count = 0
 
         all_result.append(result)

@@ -14,20 +14,20 @@ root_dir = r'./data'
 normal_data_file = os.path.join(root_dir, '正常数据2.csv')
 sample_data_file = os.path.join(root_dir, '样本数据1.csv')
 
-estimate_data_file = os.path.join(root_dir, '情况3.csv')
+estimate_data_file = os.path.join(root_dir, '情况1.csv')
 
 interval = 3
 outliers_count = 10
 threshold = 0.2
 moment_length = 5
-label_value = 2
+label_value = 4
 list_min_size = 2
 k1 = 0.85
 k2 = 0.85
-repair_size = 10
+repair_size = 20
 rollback = moment_length - 1
-under_mean_threshold = 0.8
-k3 = 0.85
+under_mean_threshold = 0.2
+k3 = 0.8
 
 single_detect_monitor_result, single_detect_mean_result = single_detect_event(sample_data_file,
                                                                               normal_data_file,
@@ -68,8 +68,8 @@ label_output_file = estimate_data_file.replace('.csv', '_label.txt')
 output_file = estimate_data_file.replace('.csv', '.txt')
 
 with open(result_output_file, 'w', encoding='utf-8') as file:
-    file.write('{}'.format(result))
-    file.write('accuracy: {}, error: {}, omit: {}\n'
+    file.write('{}\n'.format(result))
+    file.write('accuracy: {}, error: {}, omit: {}'
                .format(correct_count / total_count, error_count / total_count, omit_count / label_count))
 
 with open(label_output_file, 'w', encoding='utf-8') as file:
