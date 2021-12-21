@@ -14,13 +14,13 @@ root_dir = r'./data'
 normal_data_file = os.path.join(root_dir, '正常数据2.csv')
 sample_data_file = os.path.join(root_dir, '样本数据1.csv')
 
-estimate_data_file = os.path.join(root_dir, '情况1.csv')
+estimate_data_file = os.path.join(root_dir, '情况2.csv')
 
 interval = 3
 outliers_count = 10
 threshold = 0.2
 moment_length = 5
-label_value = 4
+label_value = 1
 list_min_size = 2
 k1 = 0.85
 k2 = 0.85

@@ -19,7 +19,7 @@ def judge(day_count, moment_count, interval,
         result = np.zeros(moment_count).astype(np.int32)
 
         for moment in range(0, moment_count):
-            if day == 5 and moment == 58:
+            if day == 5 and moment == 41:
                 cc = 0
 
             sign = 0
@@ -51,7 +51,7 @@ def judge(day_count, moment_count, interval,
                 doubt_under_mean_count += under_mean_count
 
             if start_doubt_moment != -1 and end_doubt_moment != -1:
-                if end_doubt_moment - start_doubt_moment + 1 >= list_min_size and doubt_mean != 0:
+                if end_doubt_moment - start_doubt_moment + 1 >= list_min_size:
                     sequence_day_0 = []
                     sequence_day_1 = []
                     sequence_day_2 = []
@@ -110,53 +110,62 @@ def judge(day_count, moment_count, interval,
                         [x for x in sequence_monitor_result if
                          np.sum(np.array(x) == np.array([2 for _ in range(0, len(x))])) / len(x) > k3])
 
-                    if sequence_monitor_result_1 == 2 and sequence_monitor_result_2 == 1:
-                        end_doubt_moment = end_doubt_moment - rollback
+                    doubt_under_mean_rate = doubt_under_mean_count / (
+                                end_doubt_moment + 1 - start_doubt_moment) / interval
 
-                        if end_doubt_moment >= start_doubt_moment:
-                            result[start_doubt_moment: end_doubt_moment + 1] = 1
-                    elif sequence_monitor_result_2 == 3:
-                        end_doubt_moment = end_doubt_moment - rollback
+                    if doubt_mean != 0:
+                        if sequence_monitor_result_1 == 2 and sequence_monitor_result_2 == 1:
+                            end_doubt_moment = end_doubt_moment - rollback
 
-                        if end_doubt_moment >= start_doubt_moment:
-                            result[start_doubt_moment: end_doubt_moment + 1] = 2
-                    elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 1:
-                        end_doubt_moment = end_doubt_moment - rollback
+                            if end_doubt_moment >= start_doubt_moment:
+                                result[start_doubt_moment: end_doubt_moment + 1] = 1
+                        elif sequence_monitor_result_2 == 3 and sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 != 3:
+                            end_doubt_moment = end_doubt_moment - rollback
 
-                        if end_doubt_moment >= start_doubt_moment:
-                            result[start_doubt_moment: end_doubt_moment + 1] = 1
-                    elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 2:
-                        end_doubt_moment = end_doubt_moment - rollback
+                            if end_doubt_moment >= start_doubt_moment:
+                                result[start_doubt_moment: end_doubt_moment + 1] = 2
+                        elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 1 and \
+                                doubt_under_mean_rate <= under_mean_threshold:
+                            end_doubt_moment = end_doubt_moment - rollback
 
-                        if end_doubt_moment >= start_doubt_moment:
-                            result[start_doubt_moment: end_doubt_moment + 1] = 2
-                    elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 3:
-                        end_doubt_moment = end_doubt_moment - rollback
+                            if end_doubt_moment >= start_doubt_moment:
+                                result[start_doubt_moment: end_doubt_moment + 1] = 1
+                        elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 2:
+                            end_doubt_moment = end_doubt_moment - rollback
 
-                        if end_doubt_moment >= start_doubt_moment:
-                            result[start_doubt_moment: end_doubt_moment + 1] = 3
+                            if end_doubt_moment >= start_doubt_moment:
+                                result[start_doubt_moment: end_doubt_moment + 1] = 2
+                        elif sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 == 3:
+                            end_doubt_moment = end_doubt_moment - rollback
 
-                    elif doubt_under_mean_count / (
-                            end_doubt_moment + 1 - start_doubt_moment) / interval > under_mean_threshold:
-                        result[start_doubt_moment: end_doubt_moment + 1] = 4
+                            if end_doubt_moment >= start_doubt_moment:
+                                result[start_doubt_moment: end_doubt_moment + 1] = 3
+                        elif doubt_under_mean_rate > under_mean_threshold:
+                            result[start_doubt_moment: end_doubt_moment + 1] = 4
 
-                    remain_doubt_mean_list = []
+                        remain_doubt_mean_list = []
 
-                    for sub_doubt_mean in reversed(doubt_mean_list):
-                        if np.sum(np.abs(sub_doubt_mean)) != 0:
-                            remain_doubt_mean_list.insert(0, sub_doubt_mean)
+                        for sub_doubt_mean in reversed(doubt_mean_list):
+                            if np.sum(np.abs(sub_doubt_mean)) != 0:
+                                remain_doubt_mean_list.insert(0, sub_doubt_mean)
 
-                    fault_2 = len(remain_doubt_mean_list) > 0 and np.sum(remain_doubt_mean_list[0]) == -2
+                        fault_2 = len(remain_doubt_mean_list) > 0 and np.sum(remain_doubt_mean_list[0]) == -2
 
-                    if fault_2:
-                        for sub_remain_doubt_mean in remain_doubt_mean_list:
-                            if sub_remain_doubt_mean != remain_doubt_mean_list[0]:
-                                fault_2 = False
-                                break
+                        if fault_2:
+                            for sub_remain_doubt_mean in remain_doubt_mean_list:
+                                if sub_remain_doubt_mean != remain_doubt_mean_list[0]:
+                                    fault_2 = False
+                                    break
 
-                    if fault_2:
-                        result[start_doubt_moment: end_doubt_moment + 1] = 0
-                        result[start_doubt_moment: start_doubt_moment + len(remain_doubt_mean_list)] = 2
+                        if fault_2:
+                            result[start_doubt_moment: end_doubt_moment + 1] = 0
+                            result[start_doubt_moment: start_doubt_moment + len(remain_doubt_mean_list)] = 2
+                    else:
+                        if sequence_monitor_result_2 == 3 and sequence_day_result_0 + sequence_day_result_1 + sequence_day_result_2 != 3:
+                            end_doubt_moment = end_doubt_moment - rollback
+
+                            if end_doubt_moment >= start_doubt_moment:
+                                result[start_doubt_moment: end_doubt_moment + 1] = 2
 
                 start_doubt_moment = -1
                 end_doubt_moment = -1
